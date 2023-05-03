@@ -9,7 +9,7 @@ Here we present HS 'omics database (HS-OmicsDB)',
           on patients with HS deposited on the National institute of Health gene expression omnibus (GEO).
                           Users can explore genes of interest to determine tissue-specific and cell-specific gene expression:
 Current data from bulk-sequencing studies includes:
-"73 lesional (L)
+73 lesional (L)
 28 perilesional (PL)
 30 nonlesional (NL)
 19 healthy control (HC)                          
