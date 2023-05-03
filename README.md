@@ -14,7 +14,7 @@ Current data from bulk-sequencing studies includes:
 30 nonlesional (NL)
 19 healthy control (HC)                          
 Current single cell sequencing data includes 11 samples from lesional HS skin               
-          p("With the wave of thriving HS research, this initiative could serve as a valuable 
+          With the wave of thriving HS research, this initiative could serve as a valuable 
           resource to increase access to valuable sequencing data. HS-OmicsDB will prove to be 
           a valuable validation and hypothesis generating tool in the study of HS. Future versions 
           will incorporate the growing number of ongoing HS studies employing 'omics technologies' 
