@@ -12,6 +12,10 @@ library(harmony)
 library(SeuratData)
 library(SeuratDisk)
 
+
+### Database already exists, ncbi entrez
+### https://www.ncbi.nlm.nih.gov/geo/info/geo_paccess.html
+
 # Download Haniffa's skin scRNA-seq data from https:/app.cellatlas.io/diseased-skin/dataset/3/download
 Convert("submission.h5ad", dest = "h5seurat", overwrite = TRUE)
 healthy <- LoadH5Seurat("./submission.h5seurat")
@@ -229,6 +233,12 @@ setwd("./HS_only_resolution_1.5_annot/")
 hs_subset$clusters_orig<-hs_subset@active.ident
 hs_subset$clusters_annot1<-as.character(hs_subset@active.ident)
 
+### not readable
+### From seurat vignette
+### new.cluster.ids <- c("Naive CD4 T", "CD14+ Mono", "Memory CD4 T", "B", "CD8 T", "FCGR3A+ Mono",
+###    "NK", "DC", "Platelet")
+### names(new.cluster.ids) <- levels(pbmc)
+
 hs_subset$clusters_annot1[hs_subset$clusters_orig==0 ]<-"Basal KCs"
 hs_subset$clusters_annot1[hs_subset$clusters_orig==1 ]<-"ILCs/NK Cells"
 hs_subset$clusters_annot1[hs_subset$clusters_orig==2 ]<-"T Cells"
@@ -320,6 +330,11 @@ plot1_new
 dev.off()
 
 DefaultAssay(hs_subset)<-"RNA"
+
+
+
+### Replace with lapply for parallel processing
+### seq_along(top30$gene) %>% lapply(function(i)
 
 gene_list<-as.character(top30$gene)
 unlink("./UMAP_plots_top30_genes/", recursive = TRUE)

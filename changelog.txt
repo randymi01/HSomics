@@ -1,0 +1,20 @@
+Done:
+* applied a linter
+* added confirm button and gene input validation
+* encapsulated data inside reactiveval so it is only loaded once at startup
+* added time debugging
+
+
+Issues:
+* time debugging returns five times
+* correl plot doesn't work. Heatmap expects vsd to be numeric matrix
+* very slow execute, ~15 seconds to load data, ~10 seconds for each gene plot
+
+Todo:
+* Add title to the pca
+* add loading bar when data is being read at startup
+* fix time debugging
+* fix correl plot
+* generate figs for memory and compute usage
+* create docker file
+
