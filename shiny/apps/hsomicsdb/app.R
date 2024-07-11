@@ -14,19 +14,19 @@ pkg_time <- system.time({
 
 debug <- T
 
-dl_path <- "debug/data_load_time.txt"
-fg_path <- "debug/fig_gen_time.txt"
-pkg_path <- "debug/pkg_load_time.txt"
+dl_path <- "debug/data_load_time.csv"
+fg_path <- "debug/fig_gen_time.csv"
+pkg_path <- "debug/pkg_load_time.csv"
 
 # for umap generation
 first_load <- T
 
 # initiate debug logging
-debug_message <- function(msg, file = dl_path) {
+debug_message <- function(msg, l_data, file = dl_path) {
   if (debug) {
     msg <- paste(msg, "\n")
     message(msg)
-    write(msg, file = file, append = T)
+    write(paste(unlist(l_data), collapse = ","), file = file, append = T)
   }
 }
 
@@ -44,7 +44,14 @@ time_to_str <- function(t_obj) {
   return(paste("User: ", t_obj[1], " System: ", t_obj[2], " Elapsed: ", t_obj[3]))
 }
 
-debug_message(paste("Package Load Time: ", time_to_str(pkg_time)), pkg_path)
+time_to_list <- function(t_obj) {
+  if (!(class(t_obj) == "proc_time")) {
+    stop("Input must be of class proc_time")
+  }
+  return(list(t_obj[1], t_obj[2], t_obj[3]))
+}
+
+debug_message(paste("Package Load Time: ", time_to_str(pkg_time)), time_to_list(pkg_time), pkg_path)
 
 ui <- navbarPage(
   title = "HS-OmicsDB: Hidradenitis Suppurativa Omics Database",
@@ -164,13 +171,16 @@ server <- function(input, output) {
   })
 
 
-  debug_message(paste("Data Loading Time: ", time_to_str(data_loading_time)), dl_path)
+  debug_message(paste("Data Loading Time: ", time_to_str(data_loading_time)), time_to_list(data_loading_time), dl_path)
 
 
   # check if gene exists in seurat object
   valid_input <- function(gene) {
     if (gene %in% rownames(data$seurat)) {
       return(TRUE)
+      output$warning_message <- renderText({
+        ""
+      })
     } else {
       output$warning_message <- renderText({
         paste("Gene ", gene, " not found in the dataset")
@@ -194,7 +204,7 @@ server <- function(input, output) {
       })
     })
 
-    debug_message(paste("UMAP Plot Time: ", time_to_str(umap_loading_time)), fg_path)
+    debug_message(paste("UMAP Plot Time: ", time_to_str(umap_loading_time)), append(time_to_list(umap_loading_time), "umap"), fg_path)
   }
 
   generate_plots <- function(gene) {
@@ -215,7 +225,7 @@ server <- function(input, output) {
       incProgress(0.2, detail = "Processing...")
     })
 
-    debug_message(paste("Feature Plot Time: ", time_to_str(feature_plot_time)), fg_path)
+    debug_message(paste("Feature Plot Time: ", time_to_str(feature_plot_time)), append(time_to_list(feature_plot_time), "feature"), fg_path)
 
     # Feature plot download
     output$download_feature <- downloadHandler(
@@ -239,7 +249,7 @@ server <- function(input, output) {
       })
       incProgress(0.2, detail = "Processing...")
     })
-    debug_message(paste("Violin Plot Time: ", time_to_str(vln_plot_time)), fg_path)
+    debug_message(paste("Violin Plot Time: ", time_to_str(vln_plot_time)), append(time_to_list(vln_plot_time), "violin"), fg_path)
 
     # Violin plot download
     output$download_vln <- downloadHandler(
@@ -292,7 +302,7 @@ server <- function(input, output) {
       incProgress(0.2, detail = "Processing...")
     })
 
-    debug_message(paste("Dot Plot Time: ", time_to_str(dot_plot_time)), fg_path)
+    debug_message(paste("Dot Plot Time: ", time_to_str(dot_plot_time)), append(time_to_list(dot_plot_time), "dot"), fg_path)
 
     # Dot plot download
     output$download_dot <- downloadHandler(
