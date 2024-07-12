@@ -19,3 +19,5 @@ Todo:
 * create docker file
 * move UMAP gen to static file made in preprocessing
 
+* R package name of package stuff
+* scanpy

@@ -179,7 +179,7 @@ server <- function(input, output) {
     if (gene %in% rownames(data$seurat)) {
       return(TRUE)
       output$warning_message <- renderText({
-        ""
+        " "
       })
     } else {
       output$warning_message <- renderText({
@@ -216,7 +216,8 @@ server <- function(input, output) {
       feature_plot <- Seurat::FeaturePlot(data$seurat,
         features = input$gene,
         reduction = "umap",
-        pt.size = 1, raster = FALSE, cols = c(viridis(5))
+        pt.size = 1, raster = FALSE, cols = c(viridis(5)),
+        order = T
       )
       output$feature <- renderPlot({
         req(input$submit)
