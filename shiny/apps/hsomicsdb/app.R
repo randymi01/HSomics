@@ -155,20 +155,20 @@ server <- function(input, output, clientData) {
 
     incProgress(0.1, detail = "Reading Seurat Objects...")
 
-    data$seurat <- readRDS("../../data/hsomicsdb/seurat/HS_merged_lite.RDS")
+    data$seurat <- readRDS("/shiny/data/hsomicsdb/seurat/HS_merged_lite.RDS")
     incProgress(0.3, detail = "Reading Adjusted CPM...")
 
     # bulk
-    data$cp <- readRDS("../../data/hsomicsdb/Combat_Adjusted_CPM.rds")
+    data$cp <- readRDS("/shiny/data/hsomicsdb/Combat_Adjusted_CPM.rds")
     incProgress(0.3, detail = "Reading Markers...")
 
-    data$mk <- read.delim("../../data/hsomicsdb/markers/hs.markers.top30_genes.csv",
+    data$mk <- read.delim("/shiny/data/hsomicsdb/markers/hs.markers.top30_genes.csv",
       sep = ",", stringsAsFactors = FALSE
     )
     incProgress(0.3, detail = "Reading VSD...")
 
     # bulk
-    data$vsd <- readRDS("../../data/hsomicsdb/Updated_VSD.rds")
+    data$vsd <- readRDS("/shiny/data/hsomicsdb/Updated_VSD.rds")
 
     incProgress(0.1, detail = "Done")
   })
