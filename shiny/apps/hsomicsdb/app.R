@@ -13,49 +13,6 @@ pkg_time <- system.time({
   library(shinyjs)
 })
 
-debug <- T
-
-dl_path <- "debug/data_load_time.csv"
-fg_path <- "debug/fig_gen_time.csv"
-pkg_path <- "debug/pkg_load_time.csv"
-
-# for umap generation
-first_load <- T
-
-cat(getwd())
-
-# initiate debug logging
-debug_message <- function(msg, l_data, file = dl_path) {
-  if (debug) {
-    msg <- paste(msg, "\n")
-    message(msg)
-    write(paste(unlist(l_data), collapse = ","), file = file, append = T)
-  }
-}
-
-# helper function to output proc.time to str
-
-# proc_time outputs
-# user: how much cpu time is spent in r program (ie manipulating data)
-# system: how much cpu time is spent in kernel (ie allocating memory, io)
-# elapsed: total time from start to end of program
-
-time_to_str <- function(t_obj) {
-  if (!(class(t_obj) == "proc_time")) {
-    stop("Input must be of class proc_time")
-  }
-  return(paste("User: ", t_obj[1], " System: ", t_obj[2], " Elapsed: ", t_obj[3]))
-}
-
-time_to_list <- function(t_obj) {
-  if (!(class(t_obj) == "proc_time")) {
-    stop("Input must be of class proc_time")
-  }
-  return(list(t_obj[1], t_obj[2], t_obj[3]))
-}
-
-debug_message(paste("Package Load Time: ", time_to_str(pkg_time)), time_to_list(pkg_time), pkg_path)
-
 ui <- navbarPage(
   useShinyjs(),
   title = "HS-OmicsDB: Hidradenitis Suppurativa Omics Database",
@@ -192,33 +149,29 @@ server <- function(input, output, clientData) {
   # no need since will be refreshed each time.
 
   # is reactive required for the data?
-  data_loading_time <- system.time({
-    withProgress(message = "Please Wait, Loading Data", value = 0, {
-      data <- list()
 
-      incProgress(0.1, detail = "Reading Seurat Objects...")
+  withProgress(message = "Please Wait, Loading Data", value = 0, {
+    data <- list()
 
-      data$seurat <- readRDS("../../data/hsomicsdb/seurat/HS_merged_lite.RDS")
-      incProgress(0.3, detail = "Reading Adjusted CPM...")
+    incProgress(0.1, detail = "Reading Seurat Objects...")
 
-      # bulk
-      data$cp <- readRDS("../../data/hsomicsdb/Combat_Adjusted_CPM.rds")
-      incProgress(0.3, detail = "Reading Markers...")
+    data$seurat <- readRDS("../../data/hsomicsdb/seurat/HS_merged_lite.RDS")
+    incProgress(0.3, detail = "Reading Adjusted CPM...")
 
-      data$mk <- read.delim("../../data/hsomicsdb/markers/hs.markers.top30_genes.csv",
-        sep = ",", stringsAsFactors = FALSE
-      )
-      incProgress(0.3, detail = "Reading VSD...")
+    # bulk
+    data$cp <- readRDS("../../data/hsomicsdb/Combat_Adjusted_CPM.rds")
+    incProgress(0.3, detail = "Reading Markers...")
 
-      # bulk
-      data$vsd <- readRDS("../../data/hsomicsdb/Updated_VSD.rds")
+    data$mk <- read.delim("../../data/hsomicsdb/markers/hs.markers.top30_genes.csv",
+      sep = ",", stringsAsFactors = FALSE
+    )
+    incProgress(0.3, detail = "Reading VSD...")
 
-      incProgress(0.1, detail = "Done")
-    })
+    # bulk
+    data$vsd <- readRDS("../../data/hsomicsdb/Updated_VSD.rds")
+
+    incProgress(0.1, detail = "Done")
   })
-
-
-  debug_message(paste("Data Loading Time: ", time_to_str(data_loading_time)), time_to_list(data_loading_time), dl_path)
 
 
   # check if gene exists in seurat object
@@ -240,22 +193,19 @@ server <- function(input, output, clientData) {
   # return pregenerated UMAP
   # reactive container for when width changes
   observe({
-    umap_loading_time <- system.time({
-      req(data)
-      width <- clientData$output_dr_plot_width
-      height <- clientData$output_dr_plot_height
-      output$dr_plot <- renderImage(
-        {
-          list(
-            src = "umap_plot.png",
-            width = width,
-            height = height
-          )
-        },
-        deleteFile = FALSE
-      )
-    })
-    debug_message(paste("UMAP Plot Time: ", time_to_str(umap_loading_time)), append(time_to_list(umap_loading_time), "umap"), fg_path)
+    req(data)
+    width <- clientData$output_dr_plot_width
+    height <- clientData$output_dr_plot_height
+    output$dr_plot <- renderImage(
+      {
+        list(
+          src = "umap_plot.png",
+          width = width,
+          height = height
+        )
+      },
+      deleteFile = FALSE
+    )
   })
 
 
@@ -295,21 +245,17 @@ server <- function(input, output, clientData) {
 
     # Feature plot
     if (input$feature_plot) {
-      feature_plot_time <- system.time({
-        feature_plot <- Seurat::FeaturePlot(data$seurat,
-          features = input$gene,
-          reduction = "umap",
-          pt.size = 1, raster = FALSE, cols = c(viridis(5)),
-          order = T
-        )
-        output$feature <- renderPlot({
-          req(input$submit)
-          feature_plot
-        })
-        incProgress(0.2, detail = "Processing...")
+      feature_plot <- Seurat::FeaturePlot(data$seurat,
+        features = input$gene,
+        reduction = "umap",
+        pt.size = 1, raster = FALSE, cols = c(viridis(5)),
+        order = T
+      )
+      output$feature <- renderPlot({
+        req(input$submit)
+        feature_plot
       })
-
-      debug_message(paste("Feature Plot Time: ", time_to_str(feature_plot_time)), append(time_to_list(feature_plot_time), "feature"), fg_path)
+      incProgress(0.2, detail = "Processing...")
 
       # Feature plot download
       output$download_feature <- downloadHandler(
@@ -322,21 +268,17 @@ server <- function(input, output, clientData) {
 
     # Violin plot
     if (input$vln_plot) {
-      vln_plot_time <- system.time({
-        vln_plot <- Seurat::VlnPlot(data$seurat,
-          features = input$gene,
-          pt.size = input$point_size
-        ) + NoLegend() +
-          theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+      vln_plot <- Seurat::VlnPlot(data$seurat,
+        features = input$gene,
+        pt.size = input$point_size
+      ) + NoLegend() +
+        theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
 
-        output$vln <- renderPlot({
-          req(input$submit)
-          vln_plot
-        })
-        incProgress(0.2, detail = "Processing...")
+      output$vln <- renderPlot({
+        req(input$submit)
+        vln_plot
       })
-      debug_message(paste("Violin Plot Time: ", time_to_str(vln_plot_time)), append(time_to_list(vln_plot_time), "violin"), fg_path)
-
+      incProgress(0.2, detail = "Processing...")
       # Violin plot download
       output$download_vln <- downloadHandler(
         filename = "violin.pdf",
@@ -348,50 +290,45 @@ server <- function(input, output, clientData) {
 
     # Dot plot
     if (input$dot_plot) {
-      dot_plot_time <- system.time({
-        dot_plot <- ggplot(data$cp, aes(
-          x = factor(tissue_type, levels = c("Lesional", "Perilesional", "Non-lesional", "Control")),
-          y = !!rlang::sym(input$gene),
-          fill = tissue_type
+      dot_plot <- ggplot(data$cp, aes(
+        x = factor(tissue_type, levels = c("Lesional", "Perilesional", "Non-lesional", "Control")),
+        y = !!rlang::sym(input$gene),
+        fill = tissue_type
+      )) +
+        geom_dotplot(binaxis = "y", stackdir = "center", dotsize = 0.5, stroke = NA) +
+        scale_fill_manual(values = c(
+          "Lesional" = "firebrick4",
+          "Perilesional" = "darkgoldenrod3",
+          "Non-lesional" = "darkolivegreen4",
+          "Control" = "dodgerblue4"
         )) +
-          geom_dotplot(binaxis = "y", stackdir = "center", dotsize = 0.5, stroke = NA) +
-          scale_fill_manual(values = c(
-            "Lesional" = "firebrick4",
-            "Perilesional" = "darkgoldenrod3",
-            "Non-lesional" = "darkolivegreen4",
-            "Control" = "dodgerblue4"
-          )) +
-          theme_classic() +
-          theme(axis.title.x = element_blank()) +
-          ylab(paste0(input$gene, " (CPM)")) +
-          stat_compare_means(comparisons = list(
-            c("Lesional", "Perilesional"),
-            c("Perilesional", "Non-lesional"),
-            c("Non-lesional", "Control"),
-            c("Lesional", "Non-lesional"),
-            c("Lesional", "Control"),
-            c("Perilesional", "Control")
-          )) +
-          ggtitle(input$gene) +
-          theme(
-            plot.title = element_text(
-              size = 16,
-              face = "bold",
-              hjust = 0.5
-            ),
-            legend.text = element_text(size = 8),
-            legend.title = element_text(size = 10)
-          )
+        theme_classic() +
+        theme(axis.title.x = element_blank()) +
+        ylab(paste0(input$gene, " (CPM)")) +
+        stat_compare_means(comparisons = list(
+          c("Lesional", "Perilesional"),
+          c("Perilesional", "Non-lesional"),
+          c("Non-lesional", "Control"),
+          c("Lesional", "Non-lesional"),
+          c("Lesional", "Control"),
+          c("Perilesional", "Control")
+        )) +
+        ggtitle(input$gene) +
+        theme(
+          plot.title = element_text(
+            size = 16,
+            face = "bold",
+            hjust = 0.5
+          ),
+          legend.text = element_text(size = 8),
+          legend.title = element_text(size = 10)
+        )
 
-        output$dot <- renderPlot({
-          req(input$submit)
-          dot_plot
-        })
-        incProgress(0.2, detail = "Processing...")
+      output$dot <- renderPlot({
+        req(input$submit)
+        dot_plot
       })
-
-
-      debug_message(paste("Dot Plot Time: ", time_to_str(dot_plot_time)), append(time_to_list(dot_plot_time), "dot"), fg_path)
+      incProgress(0.2, detail = "Processing...")
 
       # Dot plot download
       output$download_dot <- downloadHandler(
@@ -405,16 +342,10 @@ server <- function(input, output, clientData) {
     # correlation plot
     if (input$cor_plot) {
       # takes 30ish seconds
-      cor_plot_time <- system.time({
-        cor_plot <- heatmap(gene = input$gene, data$vsd)
-        output$Correlation <- renderPlot({
-          cor_plot
-        })
+      cor_plot <- heatmap(gene = input$gene, data$vsd)
+      output$Correlation <- renderPlot({
+        cor_plot
       })
-
-      if (debug) {
-        message(paste("Correlation Plot Time: ", cor_plot_time, "\n"))
-      }
       output$download_cor <- downloadHandler(
         filename = "CorPlot.pdf",
         content = function(file) {
@@ -429,7 +360,6 @@ server <- function(input, output, clientData) {
   # on submit
   observeEvent(input$submit, {
     req(data)
-    message("submit triggered")
     if (valid_input(input$gene)) {
       clear_plots()
       withProgress(message = "Generating plots", value = 0, {
