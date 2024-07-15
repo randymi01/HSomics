@@ -55,7 +55,7 @@ ui <- navbarPage(
     p("Bulk RNAseq Datasets:"),
     p("GSE151243, GSE154773, GSE155176, GSE189266, GSE213761"),
     p("Single-cell RNAseq Datasets:"),
-    p("GSE154775, GSE175990"),
+    p("GSE154775, GSE155850"),
     hr()
   ),
   tabPanel(
