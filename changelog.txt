@@ -11,13 +11,14 @@ Issues:
 * very slow execute, ~15 seconds to load data, ~10 seconds for each gene plot
 
 Todo:
-* Add title to the pca
+* Add title to the pca (Done 7/11)
 * add loading bar when data is being read at startup (Done 7/11)
 * fix time debugging (Done 7/11)
 * fix correl plot
 * generate figs for memory and compute usage
 * create docker file
 * move UMAP gen to static file made in preprocessing
+* Add programatic cluster labeling using suerat transfer label
 
 * R package name of package stuff
 * scanpy
