@@ -10,6 +10,7 @@ pkg_time <- system.time({
   library(bslib)
   library(pheatmap)
   library(DESeq2)
+  library(shinyjs)
 })
 
 debug <- T
@@ -20,6 +21,8 @@ pkg_path <- "debug/pkg_load_time.csv"
 
 # for umap generation
 first_load <- T
+
+cat(getwd())
 
 # initiate debug logging
 debug_message <- function(msg, l_data, file = dl_path) {
@@ -54,6 +57,7 @@ time_to_list <- function(t_obj) {
 debug_message(paste("Package Load Time: ", time_to_str(pkg_time)), time_to_list(pkg_time), pkg_path)
 
 ui <- navbarPage(
+  useShinyjs(),
   title = "HS-OmicsDB: Hidradenitis Suppurativa Omics Database",
   tabPanel(
     title = "Home",
@@ -106,12 +110,31 @@ ui <- navbarPage(
           h3("Data"),
           textInput("gene", "Genes", "IL17A"),
           textOutput("warning_message"),
-          actionButton("submit", "Submit"),
-          h3("Violin plot"),
-          numericInput("pt_size", "Point size", value = 0.1, min = 0, max = 1, step = 0.1)
+          h3("Select Plots"),
+          checkboxInput(
+            inputId = "feature_plot",
+            label = strong("Feature Plot"),
+            value = TRUE
+          ),
+          checkboxInput(
+            inputId = "vln_plot",
+            label = strong("Violin Plot"),
+            value = TRUE
+          ),
+          checkboxInput(
+            inputId = "dot_plot",
+            label = strong("Dot Plot"),
+            value = TRUE
+          ),
+          checkboxInput(
+            inputId = "cor_plot",
+            label = HTML("<strong>Correlation Plot</strong> <span style='color:red;'> (~1 min) </span>"),
+            value = FALSE
+          ),
+          actionButton("submit", "Submit")
         ),
         mainPanel(
-          plotOutput("dr_plot", width = "100%"),
+          imageOutput("dr_plot", width = "100%"),
           fluidRow(
             splitLayout(cellWidths = c("50%", "50%"), plotOutput("feature"), plotOutput("vln"))
           ),
@@ -121,9 +144,8 @@ ui <- navbarPage(
           br(),
           plotOutput("dot"),
           downloadLink("download_dot", "Download PDF"),
-          # plotOutput("vln"),
-          # downloadLink("download_vln", "Download PDF"),
-          plotOutput("Correlation")
+          plotOutput("Correlation"),
+          downloadLink("download_cor", "Download PDF")
         )
       )
     )
@@ -140,9 +162,32 @@ ui <- navbarPage(
   h6("This portal is developed and maintained by the Center for Bioinformatics, Department of Public Health Sciences and the Center for Cutaneous Biology and Immunology Research at Henry Ford Health, Detroit, Michigan.")
 )
 
+heatmap <- function(gene = "NULL", vsd) {
+  gene <- as.character(gene)
+  counts <- t(assay(vsd))
 
+  # first selects all columns except gene of interest, then runs a correlation test
+  # for each non-interest genes and the gene of interest
+  b <- apply(counts[, !(colnames(counts) == gene)], 2, function(x) {
+    cor.test(counts[, gene], x)
+  })
+  cor.vals <- sapply(b, "[[", "estimate")
+  p.vals <- sapply(b, "[[", "p.value")
+  FDR <- p.adjust(p.vals, method = "bonferroni")
+  tmp <- as.data.frame(cbind(p.vals, cor.vals, FDR))
+  tmp <- tmp[which(tmp$FDR <= 0.05 & abs(tmp$cor.vals) >= 0.5), ]
+  tissue_type <- as.data.frame(colData(vsd)[, c("Run", "tissue_type")])
+  counts1 <- t(counts)[which(colnames(counts) %in% rownames(tmp)), order(assay(vsd)[colnames(counts) %in% gene, ], decreasing = T)]
+  tissue_type <- tissue_type[match(colnames(counts1), tissue_type$Run), c(2)]
+  tissue_type <- as.data.frame(tissue_type)
+  rownames(tissue_type) <- colnames(counts1)
+  pheatmap(counts1,
+    cluster_rows = TRUE, show_rownames = FALSE, show_colnames = F,
+    cluster_cols = FALSE, annotation_col = tissue_type, main = gene
+  )
+}
 
-server <- function(input, output) {
+server <- function(input, output, clientData) {
   # reactive will dynamically reload data when RDS is updated
   # no need since will be refreshed each time.
 
@@ -156,6 +201,7 @@ server <- function(input, output) {
       data$seurat <- readRDS("../../data/hsomicsdb/seurat/HS_merged_lite.RDS")
       incProgress(0.3, detail = "Reading Adjusted CPM...")
 
+      # bulk
       data$cp <- readRDS("../../data/hsomicsdb/Combat_Adjusted_CPM.rds")
       incProgress(0.3, detail = "Reading Markers...")
 
@@ -164,6 +210,7 @@ server <- function(input, output) {
       )
       incProgress(0.3, detail = "Reading VSD...")
 
+      # bulk
       data$vsd <- readRDS("../../data/hsomicsdb/Updated_VSD.rds")
 
       incProgress(0.1, detail = "Done")
@@ -189,22 +236,57 @@ server <- function(input, output) {
     }
   }
 
-  # only run UMAP on first load
-  generate_umap <- function() {
-    # UMAP plot
-    umap_loading_time <- system.time({
-      umap_plot <- Seurat::DimPlot(data$seurat,
-        reduction = "umap",
-        pt.size = 1.1, label = TRUE, cols = as.character(polychrome(34)),
-        raster = FALSE, label.size = 6
-      ) + NoLegend() + ggtitle(paste("HS-OmicsDB UMAP ", "(n=", length(data$seurat$nCount_RNA), ")", sep = "")) +
-        theme(plot.title = element_text(hjust = 0.5))
-      output$dr_plot <- renderPlot({
-        umap_plot
-      })
-    })
 
+  # return pregenerated UMAP
+  # reactive container for when width changes
+  observe({
+    umap_loading_time <- system.time({
+      req(data)
+      width <- clientData$output_dr_plot_width
+      height <- clientData$output_dr_plot_height
+      output$dr_plot <- renderImage(
+        {
+          list(
+            src = "umap_plot.png",
+            width = width,
+            height = height
+          )
+        },
+        deleteFile = FALSE
+      )
+    })
     debug_message(paste("UMAP Plot Time: ", time_to_str(umap_loading_time)), append(time_to_list(umap_loading_time), "umap"), fg_path)
+  })
+
+
+  clear_plots <- function() {
+    output$feature <- renderPlot({})
+    output$vln <- renderPlot({})
+    output$dot <- renderPlot({})
+    output$Correlation <- renderPlot({})
+    if (input$feature_plot) {
+      shinyjs::show("download_feature")
+    } else {
+      shinyjs::hide("download_feature")
+    }
+
+    if (input$vln_plot) {
+      shinyjs::show("download_vln")
+    } else {
+      shinyjs::hide("download_vln")
+    }
+
+    if (input$dot_plot) {
+      shinyjs::show("download_dot")
+    } else {
+      shinyjs::hide("download_dot")
+    }
+
+    if (input$cor_plot) {
+      shinyjs::show("download_cor")
+    } else {
+      shinyjs::hide("download_cor")
+    }
   }
 
   generate_plots <- function(gene) {
@@ -212,142 +294,144 @@ server <- function(input, output) {
     req(data)
 
     # Feature plot
-    feature_plot_time <- system.time({
-      feature_plot <- Seurat::FeaturePlot(data$seurat,
-        features = input$gene,
-        reduction = "umap",
-        pt.size = 1, raster = FALSE, cols = c(viridis(5)),
-        order = T
-      )
-      output$feature <- renderPlot({
-        req(input$submit)
-        feature_plot
+    if (input$feature_plot) {
+      feature_plot_time <- system.time({
+        feature_plot <- Seurat::FeaturePlot(data$seurat,
+          features = input$gene,
+          reduction = "umap",
+          pt.size = 1, raster = FALSE, cols = c(viridis(5)),
+          order = T
+        )
+        output$feature <- renderPlot({
+          req(input$submit)
+          feature_plot
+        })
+        incProgress(0.2, detail = "Processing...")
       })
-      incProgress(0.2, detail = "Processing...")
-    })
 
-    debug_message(paste("Feature Plot Time: ", time_to_str(feature_plot_time)), append(time_to_list(feature_plot_time), "feature"), fg_path)
+      debug_message(paste("Feature Plot Time: ", time_to_str(feature_plot_time)), append(time_to_list(feature_plot_time), "feature"), fg_path)
 
-    # Feature plot download
-    output$download_feature <- downloadHandler(
-      filename = "feature.pdf",
-      content = function(file) {
-        ggsave(filename = file, plot = feature_plot(), width = 5 * length(input$gene), height = 4)
-      }
-    )
+      # Feature plot download
+      output$download_feature <- downloadHandler(
+        filename = "feature.pdf",
+        content = function(file) {
+          ggsave(filename = file, plot = feature_plot(), width = 5 * length(input$gene), height = 4)
+        }
+      )
+    }
 
     # Violin plot
-    vln_plot_time <- system.time({
-      vln_plot <- Seurat::VlnPlot(data$seurat,
-        features = input$gene,
-        pt.size = input$point_size
-      ) + NoLegend() +
-        theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+    if (input$vln_plot) {
+      vln_plot_time <- system.time({
+        vln_plot <- Seurat::VlnPlot(data$seurat,
+          features = input$gene,
+          pt.size = input$point_size
+        ) + NoLegend() +
+          theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
 
-      output$vln <- renderPlot({
-        req(input$submit)
-        vln_plot
+        output$vln <- renderPlot({
+          req(input$submit)
+          vln_plot
+        })
+        incProgress(0.2, detail = "Processing...")
       })
-      incProgress(0.2, detail = "Processing...")
-    })
-    debug_message(paste("Violin Plot Time: ", time_to_str(vln_plot_time)), append(time_to_list(vln_plot_time), "violin"), fg_path)
+      debug_message(paste("Violin Plot Time: ", time_to_str(vln_plot_time)), append(time_to_list(vln_plot_time), "violin"), fg_path)
 
-    # Violin plot download
-    output$download_vln <- downloadHandler(
-      filename = "violin.pdf",
-      content = function(file) {
-        ggsave(filename = file, plot = vln_plot(), width = 7 * length(input$gene), height = 5)
-      }
-    )
+      # Violin plot download
+      output$download_vln <- downloadHandler(
+        filename = "violin.pdf",
+        content = function(file) {
+          ggsave(filename = file, plot = vln_plot(), width = 7 * length(input$gene), height = 5)
+        }
+      )
+    }
 
     # Dot plot
-    dot_plot_time <- system.time({
-      dot_plot <- ggplot(data$cp, aes(
-        x = factor(tissue_type, levels = c("Lesional", "Perilesional", "Non-lesional", "Control")),
-        y = !!rlang::sym(input$gene),
-        fill = tissue_type
-      )) +
-        geom_dotplot(binaxis = "y", stackdir = "center", dotsize = 0.5, stroke = NA) +
-        scale_fill_manual(values = c(
-          "Lesional" = "firebrick4",
-          "Perilesional" = "darkgoldenrod3",
-          "Non-lesional" = "darkolivegreen4",
-          "Control" = "dodgerblue4"
+    if (input$dot_plot) {
+      dot_plot_time <- system.time({
+        dot_plot <- ggplot(data$cp, aes(
+          x = factor(tissue_type, levels = c("Lesional", "Perilesional", "Non-lesional", "Control")),
+          y = !!rlang::sym(input$gene),
+          fill = tissue_type
         )) +
-        theme_classic() +
-        theme(axis.title.x = element_blank()) +
-        ylab(paste0(input$gene, " (CPM)")) +
-        stat_compare_means(comparisons = list(
-          c("Lesional", "Perilesional"),
-          c("Perilesional", "Non-lesional"),
-          c("Non-lesional", "Control"),
-          c("Lesional", "Non-lesional"),
-          c("Lesional", "Control"),
-          c("Perilesional", "Control")
-        )) +
-        ggtitle(input$gene) +
-        theme(
-          plot.title = element_text(
-            size = 16,
-            face = "bold",
-            hjust = 0.5
-          ),
-          legend.text = element_text(size = 8),
-          legend.title = element_text(size = 10)
-        )
+          geom_dotplot(binaxis = "y", stackdir = "center", dotsize = 0.5, stroke = NA) +
+          scale_fill_manual(values = c(
+            "Lesional" = "firebrick4",
+            "Perilesional" = "darkgoldenrod3",
+            "Non-lesional" = "darkolivegreen4",
+            "Control" = "dodgerblue4"
+          )) +
+          theme_classic() +
+          theme(axis.title.x = element_blank()) +
+          ylab(paste0(input$gene, " (CPM)")) +
+          stat_compare_means(comparisons = list(
+            c("Lesional", "Perilesional"),
+            c("Perilesional", "Non-lesional"),
+            c("Non-lesional", "Control"),
+            c("Lesional", "Non-lesional"),
+            c("Lesional", "Control"),
+            c("Perilesional", "Control")
+          )) +
+          ggtitle(input$gene) +
+          theme(
+            plot.title = element_text(
+              size = 16,
+              face = "bold",
+              hjust = 0.5
+            ),
+            legend.text = element_text(size = 8),
+            legend.title = element_text(size = 10)
+          )
 
-      output$dot <- renderPlot({
-        req(input$submit)
-        dot_plot
+        output$dot <- renderPlot({
+          req(input$submit)
+          dot_plot
+        })
+        incProgress(0.2, detail = "Processing...")
       })
-      incProgress(0.2, detail = "Processing...")
-    })
 
-    debug_message(paste("Dot Plot Time: ", time_to_str(dot_plot_time)), append(time_to_list(dot_plot_time), "dot"), fg_path)
 
-    # Dot plot download
-    output$download_dot <- downloadHandler(
-      filename = "DotPlot.pdf",
-      content = function(file) {
-        ggsave(filename = file, plot = dot_plot, width = 5 * length(input$gene), height = 5)
+      debug_message(paste("Dot Plot Time: ", time_to_str(dot_plot_time)), append(time_to_list(dot_plot_time), "dot"), fg_path)
+
+      # Dot plot download
+      output$download_dot <- downloadHandler(
+        filename = "DotPlot.pdf",
+        content = function(file) {
+          ggsave(filename = file, plot = dot_plot, width = 5 * length(input$gene), height = 5)
+        }
+      )
+    }
+
+    # correlation plot
+    if (input$cor_plot) {
+      # takes 30ish seconds
+      cor_plot_time <- system.time({
+        cor_plot <- heatmap(gene = input$gene, data$vsd)
+        output$Correlation <- renderPlot({
+          cor_plot
+        })
+      })
+
+      if (debug) {
+        message(paste("Correlation Plot Time: ", cor_plot_time, "\n"))
       }
-    )
-
-    # Correlation plot
-
-    # doesn't work. find updated version
-    # convert vsd to numeric matrix
-    # cor_plot_time <- system.time({
-    #   Cor_Plot <- heatmap(gene = input$gene, as.matrix(vsd)
-    #
-    #   output$Correlation <- renderPlot({
-    #     Cor_Plot
-    #   })
-    # })
-
-    # if (debug) {
-    #   message(paste("Correlation Plot Time: ", cor_plot_time, "\n"))
-    # }
+      output$download_cor <- downloadHandler(
+        filename = "CorPlot.pdf",
+        content = function(file) {
+          ggsave(filename = file, plot = cor_plot, width = 5 * length(input$gene), height = 5)
+        }
+      )
+    }
   }
 
-  # generate umap once on load
-  # in the future make it so that we use a pregenerated umap
-  if (first_load) {
-    req(data)
-    withProgress(message = "Generating UMAP", value = 0, {
-      incProgress(0.2)
-      generate_umap()
-      incProgress(0.8)
-    })
 
-    first_load <- F
-  }
 
   # on submit
   observeEvent(input$submit, {
     req(data)
     message("submit triggered")
     if (valid_input(input$gene)) {
+      clear_plots()
       withProgress(message = "Generating plots", value = 0, {
         incProgress(0.1, detail = "Processing...")
         generate_plots(input$gene)
