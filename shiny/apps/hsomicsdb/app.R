@@ -98,12 +98,16 @@ ui <- navbarPage(
             )
           ),
           fluidRow(
-            column(6, plotOutput("feature")),
-            column(6, plotOutput("vln"))
+            column(12, plotOutput("feature"))
           ),
           fluidRow(
-            column(6, downloadLink("download_feature", "Download PDF")),
-            column(6, downloadLink("download_vln", "Download PDF"))
+            column(12, downloadLink("download_feature", "Download PDF"))
+          ),
+          fluidRow(
+            column(12, plotOutput("vln"))
+          ),
+          fluidRow(
+            column(12, downloadLink("download_vln", "Download PDF"))
           ),
           br(),
           fluidRow(
@@ -165,10 +169,14 @@ heatmap <- function(gene = "NULL", vsd) {
 }
 
 server <- function(input, output, clientData) {
+  # hide download buttons on startup:
+  shinyjs::hide("download_feature")
+  shinyjs::hide("download_vln")
+  shinyjs::hide("download_dot")
+  shinyjs::hide("download_cor")
+
   # reactive will dynamically reload data when RDS is updated
   # no need since will be refreshed each time.
-
-  # is reactive required for the data?
 
   withProgress(message = "Please Wait, Loading Data", value = 0, {
     data <- list()
@@ -197,10 +205,10 @@ server <- function(input, output, clientData) {
   # check if gene exists in seurat object
   valid_input <- function(gene) {
     if (gene %in% rownames(data$seurat)) {
-      return(TRUE)
       output$warning_message <- renderText({
         " "
       })
+      return(TRUE)
     } else {
       output$warning_message <- renderText({
         paste("Gene ", gene, " not found in the dataset")
@@ -226,11 +234,7 @@ server <- function(input, output, clientData) {
     )
   })
 
-  # hide download buttons on startup:
-  shinyjs::hide("download_feature")
-  shinyjs::hide("download_vln")
-  shinyjs::hide("download_dot")
-  shinyjs::hide("download_cor")
+
 
   clear_plots <- function() {
     output$feature <- renderPlot({})
@@ -269,7 +273,7 @@ server <- function(input, output, clientData) {
     # Feature plot
     if (input$feature_plot) {
       feature_plot <- Seurat::FeaturePlot(data$seurat,
-        features = input$gene,
+        features = gene,
         reduction = "umap",
         pt.size = 1, raster = FALSE, cols = c(viridis(5)),
         order = T
@@ -284,7 +288,7 @@ server <- function(input, output, clientData) {
       output$download_feature <- downloadHandler(
         filename = "feature.pdf",
         content = function(file) {
-          ggsave(filename = file, plot = feature_plot(), width = 5 * length(input$gene), height = 4)
+          ggsave(filename = file, plot = feature_plot(), width = 5 * length(gene), height = 4)
         }
       )
     }
@@ -292,8 +296,8 @@ server <- function(input, output, clientData) {
     # Violin plot
     if (input$vln_plot) {
       vln_plot <- Seurat::VlnPlot(data$seurat,
-        features = input$gene,
-        pt.size = input$point_size
+        features = gene,
+        pt.size = 0.1
       ) + NoLegend() +
         theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
 
@@ -306,7 +310,7 @@ server <- function(input, output, clientData) {
       output$download_vln <- downloadHandler(
         filename = "violin.pdf",
         content = function(file) {
-          ggsave(filename = file, plot = vln_plot(), width = 7 * length(input$gene), height = 5)
+          ggsave(filename = file, plot = vln_plot(), width = 7 * length(gene), height = 5)
         }
       )
     }
@@ -315,7 +319,7 @@ server <- function(input, output, clientData) {
     if (input$dot_plot) {
       dot_plot <- ggplot(data$cp, aes(
         x = factor(tissue_type, levels = c("Lesional", "Perilesional", "Non-lesional", "Control")),
-        y = !!rlang::sym(input$gene),
+        y = !!rlang::sym(gene),
         fill = tissue_type
       )) +
         geom_dotplot(binaxis = "y", stackdir = "center", dotsize = 0.5, stroke = NA) +
@@ -327,7 +331,7 @@ server <- function(input, output, clientData) {
         )) +
         theme_classic() +
         theme(axis.title.x = element_blank()) +
-        ylab(paste0(input$gene, " (CPM)")) +
+        ylab(paste0(gene, " (CPM)")) +
         stat_compare_means(comparisons = list(
           c("Lesional", "Perilesional"),
           c("Perilesional", "Non-lesional"),
@@ -336,7 +340,7 @@ server <- function(input, output, clientData) {
           c("Lesional", "Control"),
           c("Perilesional", "Control")
         )) +
-        ggtitle(input$gene) +
+        ggtitle(gene) +
         theme(
           plot.title = element_text(
             size = 16,
@@ -357,7 +361,7 @@ server <- function(input, output, clientData) {
       output$download_dot <- downloadHandler(
         filename = "DotPlot.pdf",
         content = function(file) {
-          ggsave(filename = file, plot = dot_plot, width = 5 * length(input$gene), height = 5)
+          ggsave(filename = file, plot = dot_plot, width = 5 * length(gene), height = 5)
         }
       )
     }
@@ -365,14 +369,14 @@ server <- function(input, output, clientData) {
     # correlation plot
     if (input$cor_plot) {
       # takes 30ish seconds
-      cor_plot <- heatmap(gene = input$gene, data$vsd)
+      cor_plot <- heatmap(gene = gene, data$vsd)
       output$Correlation <- renderPlot({
         cor_plot
       })
       output$download_cor <- downloadHandler(
         filename = "CorPlot.pdf",
         content = function(file) {
-          ggsave(filename = file, plot = cor_plot, width = 5 * length(input$gene), height = 5)
+          ggsave(filename = file, plot = cor_plot, width = 5 * length(gene), height = 5)
         }
       )
     }
@@ -383,11 +387,12 @@ server <- function(input, output, clientData) {
   # on submit
   observeEvent(input$submit, {
     req(data)
-    if (valid_input(input$gene)) {
+    gene <- toupper(input$gene)
+    if (valid_input(gene)) {
       clear_plots()
       withProgress(message = "Generating plots", value = 0, {
         incProgress(0.1, detail = "Processing...")
-        generate_plots(input$gene)
+        generate_plots(gene)
         incProgress(0.5, detail = "Done")
       })
     }
