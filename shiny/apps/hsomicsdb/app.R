@@ -91,18 +91,33 @@ ui <- navbarPage(
           actionButton("submit", "Submit")
         ),
         mainPanel(
-          imageOutput("dr_plot", width = "100%"),
           fluidRow(
-            splitLayout(cellWidths = c("50%", "50%"), plotOutput("feature"), plotOutput("vln"))
+            div(
+              style = "overflow: hidden;",
+              imageOutput("dr_plot", width = "100%")
+            )
           ),
           fluidRow(
-            splitLayout(cellWidths = c("50%", "50%"), downloadLink("download_feature", "Download PDF"), downloadLink("download_vln", "Download PDF"))
+            column(6, plotOutput("feature")),
+            column(6, plotOutput("vln"))
+          ),
+          fluidRow(
+            column(6, downloadLink("download_feature", "Download PDF")),
+            column(6, downloadLink("download_vln", "Download PDF"))
           ),
           br(),
-          plotOutput("dot"),
-          downloadLink("download_dot", "Download PDF"),
-          plotOutput("Correlation"),
-          downloadLink("download_cor", "Download PDF")
+          fluidRow(
+            column(12, plotOutput("dot"))
+          ),
+          fluidRow(
+            column(12, downloadLink("download_dot", "Download PDF"))
+          ),
+          fluidRow(
+            column(12, plotOutput("Correlation"))
+          ),
+          fluidRow(
+            column(12, downloadLink("download_cor", "Download PDF"))
+          )
         )
       )
     )
@@ -116,7 +131,12 @@ ui <- navbarPage(
     ## p("Use the navigation tools to search, filter, and order the table of gene markers."),
     DT::dataTableOutput("markers")
   ),
-  h6("This portal is developed and maintained by the Center for Bioinformatics, Department of Public Health Sciences and the Center for Cutaneous Biology and Immunology Research at Henry Ford Health, Detroit, Michigan.")
+  tags$footer(
+    tags$div(
+      style = "background-color: #f5f5f5; padding: 5px; text-align: center; font-size: 10px; border-top: 1px solid #ddd; position: fixed; left: 0; bottom: 0; width: 100%;",
+      "This portal is developed and maintained by the Center for Bioinformatics, Department of Public Health Sciences and the Center for Cutaneous Biology and Immunology Research at Henry Ford Health, Detroit, Michigan."
+    )
+  )
 )
 
 heatmap <- function(gene = "NULL", vsd) {
@@ -155,20 +175,20 @@ server <- function(input, output, clientData) {
 
     incProgress(0.1, detail = "Reading Seurat Objects...")
 
-    data$seurat <- readRDS("/shiny/data/hsomicsdb/seurat/HS_merged_lite.RDS")
+    data$seurat <- readRDS("../../data/hsomicsdb/seurat/HS_merged_lite.RDS")
     incProgress(0.3, detail = "Reading Adjusted CPM...")
 
     # bulk
-    data$cp <- readRDS("/shiny/data/hsomicsdb/Combat_Adjusted_CPM.rds")
+    data$cp <- readRDS("../../data/hsomicsdb/Combat_Adjusted_CPM.rds")
     incProgress(0.3, detail = "Reading Markers...")
 
-    data$mk <- read.delim("/shiny/data/hsomicsdb/markers/hs.markers.top30_genes.csv",
+    data$mk <- read.delim("../../data/hsomicsdb/markers/hs.markers.top30_genes.csv",
       sep = ",", stringsAsFactors = FALSE
     )
     incProgress(0.3, detail = "Reading VSD...")
 
     # bulk
-    data$vsd <- readRDS("/shiny/data/hsomicsdb/Updated_VSD.rds")
+    data$vsd <- readRDS("../../data/hsomicsdb/Updated_VSD.rds")
 
     incProgress(0.1, detail = "Done")
   })
@@ -194,20 +214,23 @@ server <- function(input, output, clientData) {
   # reactive container for when width changes
   observe({
     req(data)
-    width <- clientData$output_dr_plot_width
-    height <- clientData$output_dr_plot_height
     output$dr_plot <- renderImage(
       {
         list(
           src = "umap_plot.png",
-          width = width,
-          height = height
+          width = "100%",
+          height = "100%"
         )
       },
       deleteFile = FALSE
     )
   })
 
+  # hide download buttons on startup:
+  shinyjs::hide("download_feature")
+  shinyjs::hide("download_vln")
+  shinyjs::hide("download_dot")
+  shinyjs::hide("download_cor")
 
   clear_plots <- function() {
     output$feature <- renderPlot({})
