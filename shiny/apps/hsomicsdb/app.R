@@ -13,6 +13,19 @@ pkg_time <- system.time({
   library(shinyjs)
 })
 
+# add data loading as globals, Rshiny version of caching
+
+data <- list()
+
+data$seurat <- readRDS("../../data/hsomicsdb/seurat/HS_merged_lite.RDS")
+
+data$cp <- readRDS("../../data/hsomicsdb/Combat_Adjusted_CPM.rds")
+
+data$mk <- read.delim("../../data/hsomicsdb/markers/hs.markers.top30_genes.csv",
+  sep = ",", stringsAsFactors = FALSE
+)
+data$vsd <- readRDS("../../data/hsomicsdb/Updated_VSD.rds")
+
 ui <- navbarPage(
   useShinyjs(),
   title = "HS-OmicsDB: Hidradenitis Suppurativa Omics Database",
@@ -168,39 +181,13 @@ heatmap <- function(gene = "NULL", vsd) {
   )
 }
 
+
 server <- function(input, output, clientData) {
   # hide download buttons on startup:
   shinyjs::hide("download_feature")
   shinyjs::hide("download_vln")
   shinyjs::hide("download_dot")
   shinyjs::hide("download_cor")
-
-  # reactive will dynamically reload data when RDS is updated
-  # no need since will be refreshed each time.
-
-  withProgress(message = "Please Wait, Loading Data", value = 0, {
-    data <- list()
-
-    incProgress(0.1, detail = "Reading Seurat Objects...")
-
-    data$seurat <- readRDS("../../data/hsomicsdb/seurat/HS_merged_lite.RDS")
-    incProgress(0.3, detail = "Reading Adjusted CPM...")
-
-    # bulk
-    data$cp <- readRDS("../../data/hsomicsdb/Combat_Adjusted_CPM.rds")
-    incProgress(0.3, detail = "Reading Markers...")
-
-    data$mk <- read.delim("../../data/hsomicsdb/markers/hs.markers.top30_genes.csv",
-      sep = ",", stringsAsFactors = FALSE
-    )
-    incProgress(0.3, detail = "Reading VSD...")
-
-    # bulk
-    data$vsd <- readRDS("../../data/hsomicsdb/Updated_VSD.rds")
-
-    incProgress(0.1, detail = "Done")
-  })
-
 
   # check if gene exists in seurat object
   valid_input <- function(gene) {
